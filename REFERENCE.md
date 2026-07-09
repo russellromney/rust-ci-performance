@@ -1,4 +1,4 @@
-# rust-ci-performance — deeper levers
+# rust-ci-performance: deeper levers
 
 Rarer, higher-effort levers. The playbook (`SKILL.md`) covers measure-first, the
 triage, and the common levers. Open this when `cargo build --timings` shows you
