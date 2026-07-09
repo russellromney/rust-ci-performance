@@ -1,12 +1,35 @@
 # rust-ci-performance
 
-An agent **skill** that makes a Rust project's CI and local test builds faster —
-the measure-first way. It diagnoses the *real* bottleneck (compile vs link vs
-test execution) and applies the right lever instead of guessing.
+A measure-first agent **skill** for making a Rust project's CI and local test
+builds faster. It diagnoses the *real* bottleneck — compile vs link vs test
+execution — and applies the right lever instead of guessing.
+
+Works with Claude Code, Cursor, Windsurf, Copilot, Codex, Aider, Zed, Amp,
+Cline, OpenCode, Kimi, Grok, pi, and pretty much any other agent that supports
+skills.
 
 Every number in the skill is **measured**, not estimated — from cutting a real
 ~80k-LOC Rust workspace's CI (~220 test binaries, 3000+ tests) on Linux + macOS
 runners.
+
+## Install
+
+```sh
+npx add-skill russellromney/rust-ci-performance
+```
+
+That's it. The CLI figures out which agents you have and installs the skill to
+the right place. (It reads this public repo directly — nothing is published to
+the npm registry.)
+
+After installing, just ask your agent:
+
+> speed up my Rust CI — it takes 15 minutes
+
+> my `cargo test` job is slow, what's the bottleneck?
+
+`CLAUDE.md` and `AGENTS.md` are symlinks to `SKILL.md`, so the same content
+works across agent conventions.
 
 ## Why
 
@@ -38,37 +61,104 @@ anything.
   three static gates, warm-vs-warm measurement, rustflags invalidating caches)
 - Copy-paste `gh` measurement commands
 
-## Install (local)
+## Manual install
 
-Not published to an skills registry yet — install by copying `SKILL.md` into your
-agent's skills directory.
+If `add-skill` doesn't work for your setup, install manually. Each command drops
+`SKILL.md` where that agent looks for skills. Use `~/…` for a user-global install
+or the project-relative path for one repo.
+
+<details>
+<summary><b>Claude Code</b></summary>
+
+```sh
+# user-global
+git clone https://github.com/russellromney/rust-ci-performance.git ~/.claude/skills/rust-ci-performance
+# or per-project
+git clone https://github.com/russellromney/rust-ci-performance.git .claude/skills/rust-ci-performance
+```
+</details>
+
+<details>
+<summary><b>OpenAI Codex</b></summary>
+
+```sh
+git clone https://github.com/russellromney/rust-ci-performance.git ~/.codex/skills/rust-ci-performance
+# or per-project: .codex/skills/rust-ci-performance
+```
+</details>
+
+<details>
+<summary><b>Grok</b></summary>
+
+```sh
+git clone https://github.com/russellromney/rust-ci-performance.git ~/.grok/skills/rust-ci-performance
+```
+</details>
+
+<details>
+<summary><b>Kimi (kimi-code)</b></summary>
+
+```sh
+git clone https://github.com/russellromney/rust-ci-performance.git ~/.kimi-code/skills/rust-ci-performance
+```
+</details>
+
+<details>
+<summary><b>OpenCode</b></summary>
+
+```sh
+git clone https://github.com/russellromney/rust-ci-performance.git .opencode/skills/rust-ci-performance
+# or user-global: ~/.config/opencode/skill/rust-ci-performance
+```
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+```sh
+git clone https://github.com/russellromney/rust-ci-performance.git .cursor/skills/rust-ci-performance
+# or drop the rule text directly:
+curl -o .cursorrules https://raw.githubusercontent.com/russellromney/rust-ci-performance/main/SKILL.md
+```
+</details>
+
+<details>
+<summary><b>Windsurf</b></summary>
+
+```sh
+mkdir -p .windsurf/rules
+curl -o .windsurf/rules/rust-ci-performance.md https://raw.githubusercontent.com/russellromney/rust-ci-performance/main/SKILL.md
+```
+</details>
+
+<details>
+<summary><b>Cline / Roo Code</b></summary>
+
+```sh
+mkdir -p .clinerules
+curl -o .clinerules/rust-ci-performance.md https://raw.githubusercontent.com/russellromney/rust-ci-performance/main/SKILL.md
+```
+</details>
+
+<details>
+<summary><b>Aider</b></summary>
 
 ```sh
 git clone https://github.com/russellromney/rust-ci-performance.git
-
-# Claude Code
-mkdir -p ~/.claude/skills/rust-ci-performance
-cp rust-ci-performance/SKILL.md ~/.claude/skills/rust-ci-performance/
-
-# Codex / Grok (same layout)
-cp rust-ci-performance/SKILL.md ~/.codex/skills/rust-ci-performance/SKILL.md
-cp rust-ci-performance/SKILL.md ~/.grok/skills/rust-ci-performance/SKILL.md
-
-# OpenCode
-mkdir -p ~/.config/opencode/skill/rust-ci-performance
-cp rust-ci-performance/SKILL.md ~/.config/opencode/skill/rust-ci-performance/SKILL.md
+aider --read rust-ci-performance/SKILL.md
 ```
+</details>
 
-`AGENTS.md` points agents at `SKILL.md`, mirroring the convention used by other
-agent-skill repos.
+<details>
+<summary><b>pi</b></summary>
 
-## Use
+```sh
+git clone https://github.com/russellromney/rust-ci-performance.git ~/.pi/skills/rust-ci-performance
+```
+</details>
 
-Once installed, ask your agent to speed up CI and it will apply the playbook:
-
-> speed up my Rust CI — it takes 15 minutes
-
-> my `cargo test` job is slow, what's the bottleneck?
+Any other agent: point it at `SKILL.md` however it loads skills or rules — the
+whole skill is that one file.
 
 ## License
 
