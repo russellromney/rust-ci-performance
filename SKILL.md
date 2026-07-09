@@ -53,8 +53,7 @@ Tools to tell them apart:
   not your problem. Look at linking or test execution.
 - **Timestamps in the log.** Compare the last `Compiling` line, the moment tests
   start, and the total job time. On tina-rs, 3013 tests ran in ~30s but the job
-  took ~430s. Almost all of it was compile and link, so splitting tests would
-  not have helped.
+  took ~430s. Almost all of it was compile and link.
 
 ## The levers, in order of typical impact
 
@@ -179,8 +178,6 @@ compile-fail suites clashing).
 
 ## Gotchas checklist (learned the hard way)
 
-- **It is easy to weaken the gate without noticing.** Keep required-check job
-  names, keep PR triggers, and never let a must-pass job become optional.
 - **Three static gates.** A `make verify`-style CI runs fmt-check, clippy with
   `-D warnings`, and `cargo doc` with `RUSTDOCFLAGS="-D warnings"`. All three
   fail on warnings. Plain `cargo test` runs none of them. A public doc comment
@@ -196,16 +193,14 @@ compile-fail suites clashing).
   still there. Make it deterministic instead: gate the workers, assert on the
   mechanism, add a watchdog. `--retries` hides the flake, it does not fix it.
 
-## TL;DR routing
+## TL;DR
 
-1. Run `cargo build --timings`. Everything else is a guess without it.
-2. One sequential CI job? Split it into parallel jobs.
-3. Add rust-cache and set `CARGO_INCREMENTAL=0`.
-4. Find the bottleneck: check the hit rate and whether you are compile-, link-,
-   or execution-bound.
-5. Low hit rate? Fix the cache. Cache fine but still slow? It is **linking**:
-   mold, split-debuginfo, fewer test binaries.
-6. Compile-bound on one big crate, or out of common levers? See `REFERENCE.md`.
-7. Execution-bound (rare)? Use nextest archive and partition.
-8. Always: cancel-in-progress on PRs, cheap checks first, three static gates,
-   warm-vs-warm timing.
+1. Run `cargo build --timings` first. Everything else is a guess without it.
+2. Split a sequential CI job into parallel jobs. Add rust-cache with
+   `CARGO_INCREMENTAL=0`.
+3. Check the hit rate and whether you are compile-, link-, or execution-bound.
+4. Cache low: fix the cache. Cache fine but slow: linking (mold, split-debuginfo,
+   fewer test binaries).
+5. One big crate, or out of common levers: `REFERENCE.md`. Execution-bound:
+   nextest archive and partition.
+6. Always on PRs: cancel-in-progress, cheap checks first, three static gates.
