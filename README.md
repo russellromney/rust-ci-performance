@@ -15,12 +15,16 @@ runners.
 ## Install
 
 ```sh
-npx add-skill russellromney/rust-ci-performance
+npx skills add russellromney/rust-ci-performance
 ```
 
 That's it. The CLI figures out which agents you have and installs the skill to
 the right place. (It reads this public repo directly — nothing is published to
-the npm registry.)
+the npm registry.) Add `--global` for a user-level install, or `--all` to
+install to every detected agent without prompts.
+
+> The `skills` CLI was formerly `add-skill`; `npx add-skill …` still works but
+> prints a deprecation notice — prefer `npx skills add`.
 
 After installing, just ask your agent:
 
