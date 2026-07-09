@@ -1,73 +1,83 @@
 # rust-ci-performance — deeper levers
 
-Rarer / higher-effort levers. The playbook (`SKILL.md`) covers measure-first,
-the triage, and the common levers. Open this when `cargo build --timings` says
-you're **compile-bound on a fat crate**, or the common levers aren't enough.
-Numbers marked **reported** are cited third-party claims — verify on your box.
+Rarer, higher-effort levers. The playbook (`SKILL.md`) covers measure-first, the
+triage, and the common levers. Open this when `cargo build --timings` shows you
+are **compile-bound on one big crate**, or when the common levers are not
+enough. Numbers marked **reported** come from someone else, so verify them
+yourself.
 
-## Structural — when compile-bound on a monolith
+## Structural levers: when compile-bound on one big crate
 
-Only after `--timings` shows one/few crates dominating with low core
-utilization. High ceiling, high effort.
+Use these only after `--timings` shows one or a few crates taking most of the
+time while your cores sit idle. Big payoff, big effort.
 
 ### Split the giant crate (biggest structural win)
-LLVM codegen is single-threaded per codegen unit and the *crate* is Cargo's unit
-of parallelism — a monolith serializes the back-end no matter how many cores you
-have. Splitting into workspace crates lets codegen run in parallel. Reported
-extreme: Feldera's generated ~100k-line crate went 25–45 min → ~2 min by
-splitting into ~1100 crates (saturating 128 threads).
-- Footgun: a leaf crate depending on everything re-serializes the graph (the
-  "diamond join"). Diminishing returns + per-crate fixed overhead.
-- **Bumping `codegen-units` is cargo-culted** — no meaningful gain from 16→256 in
-  practice. Parallelism comes from crate boundaries, not this knob.
+LLVM compiles one codegen unit at a time, and Cargo runs one crate per job slot.
+So one giant crate runs the slow back-end on a single core, no matter how many
+cores you have. Split it into several workspace crates and they compile in
+parallel. Reported case: Feldera's generated ~100k-line crate went from 25–45
+min to ~2 min after they split it into ~1100 crates and used all 128 threads.
+- Footgun: if one crate depends on all the others, everything waits on it again
+  (the "diamond join"). Returns shrink as you split, and each crate adds fixed
+  overhead.
+- **Raising `codegen-units` is a myth.** Going from 16 to 256 gave no real gain
+  in practice. The parallelism comes from splitting crates, not this setting.
 
 ### De-genericize hot generic code (guided by `cargo llvm-lines`)
-Each generic instantiation is codegen'd separately — generic-heavy APIs explode
-IR volume, the single-threaded slow thing. Refactor only what llvm-lines flags:
-- Outer-generic / inner-concrete: thin generic wrapper converts to a concrete
-  type, then calls a non-generic inner `fn` compiled once (stdlib pattern).
-- `&dyn Trait` instead of generics on COLD paths: one codegen copy vs N (harmful
-  on hot loops).
-- `#[inline]` discipline: don't blanket it — forces cross-crate codegen dup.
+Every use of a generic with a new type compiles a fresh copy. Generic-heavy code
+makes a huge amount of IR, and compiling IR is the slow single-threaded step.
+Only change what `cargo llvm-lines` flags:
+- Keep a thin generic wrapper that converts its argument to a concrete type,
+  then calls a plain inner function that compiles once. The standard library
+  does this a lot.
+- On cold paths, take `&dyn Trait` instead of a generic. That compiles one copy
+  instead of many. Do not do it on hot loops.
+- Do not put `#[inline]` on everything. It makes other crates recompile the
+  function too.
 
 ### Nightly compiler levers (inconsistent, footgun-heavy)
-Only if compile-bound and you can run nightly in CI:
-- `RUSTFLAGS="-Z threads=8"` — parallel rustc front-end. Reported up to ~50% on
-  front-end-bound code; barely moves codegen-bound monoliths (split those).
-- Cranelift for DEBUG builds (`CARGO_PROFILE_DEV_CODEGEN_BACKEND=cranelift`) —
-  faster, less-optimized codegen. **Hard-fails on inline-asm deps**; binaries
-  unoptimized. Local iteration, not CI that also runs release.
-- `-Z share-generics=y` — already on for dev/debug by default; off for release.
+Only worth it if you are compile-bound and can run nightly in CI:
+- `RUSTFLAGS="-Z threads=8"` runs the rustc front end in parallel. Reported up
+  to ~50% faster on front-end-bound code. It barely helps a codegen-bound
+  monolith; split that instead.
+- Cranelift for debug builds (`CARGO_PROFILE_DEV_CODEGEN_BACKEND=cranelift`)
+  compiles faster but optimizes less. It fails outright on deps that use inline
+  asm, and the binaries are slow. Good for local iteration, not for CI that also
+  builds release.
+- `-Z share-generics=y` is already on for dev and debug builds. It is off for
+  release.
 
-## Situational
+## Situational levers
 
-- **cargo-hakari / workspace-hack** — a dep built with different feature sets by
-  different workspace members compiles multiple times. hakari generates a
-  `workspace-hack` crate unifying to the feature union so each builds once
-  (reported up to ~1.7×). Only with real feature duplication — else pure
-  overhead.
-- **cargo-hack** — `cargo hack check --feature-powerset --depth 2` (NOT full
-  powerset = 2^n) catches "feature X doesn't build alone" in one job instead of
-  an exploding matrix.
-- **cargo-chef** — only if CI builds a container image: caches dependency compile
-  as a Docker layer (reported >50% when only source changes). **No-op on
-  ephemeral CI unless the layer/BuildKit cache is persisted** (registry
-  `--cache-to/--cache-from` or a cached-runner service).
-- **Cached-runner services (Depot / Namespace / Blacksmith / RunsOn)** —
-  persistent NVMe cache that makes `actions/cache` restore near-instant. Vendor
-  numbers (~2×) — verify. **Fix caching before bigger raw runners**: 16-core vs
-  8-core gave muted gains when cache variability dominated.
+- **cargo-hakari / workspace-hack.** When workspace members turn on different
+  features for the same dependency, that dependency compiles more than once.
+  hakari writes a `workspace-hack` crate that turns on the full set of features
+  once, so each dependency builds a single time (reported up to ~1.7×). Only
+  helps if you have this duplication. Otherwise it is pure overhead.
+- **cargo-hack.** `cargo hack check --feature-powerset --depth 2` checks feature
+  combinations up to two at a time. It catches "feature X does not build on its
+  own" in one job. Skip the full powerset; it is 2^n combinations.
+- **cargo-chef.** Only if CI builds a container image. It caches the dependency
+  build as a Docker layer, so a source-only change skips it (reported over 50%
+  faster). It does nothing on throwaway CI runners unless you save the layer
+  cache, either with a registry (`--cache-to`/`--cache-from`) or a cached-runner
+  service.
+- **Cached-runner services (Depot, Namespace, Blacksmith, RunsOn).** They keep a
+  fast cache on local disk, so restoring `actions/cache` is almost instant.
+  Their numbers (~2×) come from vendors, so verify. Fix caching before you pay
+  for bigger runners. Going from 8 to 16 cores gave small gains once cache speed
+  was the real limit.
 
-## Release-profile tuning (runtime perf, not build speed)
+## Release-profile tuning (runtime speed, not build speed)
 
-Off the CI-speed thesis, but frequently missing. A workspace with no
-`[profile.release]` ships `lto=false, codegen-units=16` → zero cross-crate
-inlining:
+This is about runtime speed, not build speed, but it is often missing. A
+workspace with no `[profile.release]` uses `lto=false` and `codegen-units=16`,
+so it never inlines across crates:
 ```toml
 [profile.release]
 lto = "thin"          # or "fat"
 codegen-units = 1
-# Do NOT blindly add panic = "abort" — see the SKILL.md gotcha.
+# Do not add panic = "abort" blindly. See the panic gotcha in SKILL.md.
 ```
 
 ## Extended measurement
